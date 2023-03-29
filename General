@@ -1,0 +1,109 @@
+wget https://dlcdn.apache.org/spark/spark-3.3.2/spark-3.3.2-bin-hadoop3.tgz
+ls
+tar -xvf spark-3.3.2-bin-hadoop3.tgz
+ls
+cd spark-3.3.2-bin-hadoop3/
+ls
+./bin/pyspark
+./bin/pyspark --packages com.datastax.spark:spark-cassandra-connector_2.12:3.3.0
+
+cd /usr/lib/python3.6/spark-3.3.2-bin-hadoop3/
+
+./bin/pyspark --packages com.datastax.spark:spark-cassandra-connector_2.12:3.3.0
+
+./bin/spark-submit --jars ./jars/jnr-posix-3.1.11.jar,./jars/hadoop-aws-3.3.1.jar,./jars/aws-java-sdk-bundle-1.11.901.jar --packages com.datastax.spark:spark-cassandra-connector_2.12:3.3.0 pt_aws_cass.py > pt.log
+check run.sh
+
+above command will load cassandra package from web
+you can also use --jars and provide jar while connecting to pyspark for Cassandra
+
+/////df = sql.read.format("org.apache.spark.sql.cassandra").\
+/////option("spark.cassandra.connection.host", "xx.xx.xx.xxx").\
+/////option(keyspace="onek1", table="mytable").load()
+
+
+/////df = spark.read.format("org.apache.spark.sql.cassandra").options(table="tablename", keyspace="onek1").load()
+
+create SparkSession object : 
+spark = SparkSession \
+		.builder 	\
+		.appName("spark-cass")	\
+		.config("spark.jars.packages","com.datastax.spark:spark-cassandra-connector_2.12:3.3.0")	\
+		.config("spark.sql.catalog.client","com.datastax.spark.connector.datasource.CassandraCatalog")	\
+		.config("spark.sql.catalog.client.spark.cassandra.connection.host","xx.xx.xx.xxx")	\
+		.config("spark.sql.catalog.client.spark.cassandra.connection.port","9042")	\
+		.getOrCreate()	
+    
+    create a dataframe to read from Cassandra : 
+df_read=spark.read\
+    .format("org.apache.spark.sql.cassandra")\
+    .options(table="table_name", keyspace="onek1")\
+    .load()
+	
+write to cassandra table : 
+ df_read.write\
+    .format("org.apache.spark.sql.cassandra")\
+    .mode('append')\
+    .options(table="table_name", keyspace="onek1")\
+    .save()
+	
+	https://github.com/datastax/spark-cassandra-connector/blob/master/doc/15_python.md
+	================================================================
+	
+	
+	errors:
+   StructField("l_orderkey", StringType(), True),
+NameError: name 'StructField' is not defined
+sol:
+	from pyspark.sql.types import StructField
+from pyspark.sql.types import StructType
+
+
+Caused by: java.lang.ClassNotFoundException: Class org.apache.hadoop.fs.s3a.S3AFileSystem not found
+for aws also you need jars
+ ./bin/spark-submit --jars ./jars/hadoop-aws-3.3.1.jar,./jars/aws-java-sdk-bundle-1.11.901.jar,./jar/commons-pool2-2.11.1.jar --packages com.datastax.spark:spark-cassandra-connector_2.12:3.3.0 pt_aws_cass.py
+add these above jars
+
+This could be normal if JNR is excluded from the classpath java.lang.NoClassDefFoundError: jnr/posix/POSIXHandler
+add jar : JNR POSIX » 3.1.11
+
+py4j.protocol.Py4JJavaError: An error occurred while calling o54.save. : java.lang.NoClassDefFoundError: com/datastax/oss/driver/api/core/type/DataType
+spark-cassandra-connector-assembly_2.12-3.3.0.jar
+
+./bin/spark-submit --jars ./jars/jnr-posix-3.1.11.jar,./jars/hadoop-aws-3.3.1.jar,./jars/aws-java-sdk-bundle-1.12.344.jar,./jars/guava-31.1-jre.jar,./jars/guava-19.0.jar,./jars/spark-cassandra-connector-assembly_2.12-3.3.0.jar --packages com.datastax.spark:spark-cassandra-connector_2.12:3.3.0 pt_aws_cass.py > pt.log
+
+
+
+ReadTimeout error in count(*)
+I ended up doing below options, increased below options value by 10 times.
+
+edited /etc/cassandra/cassandra.yaml file
+
+sudo nano /etc/cassandra/cassandra.yaml
+
+# How long the coordinator should wait for read operations to complete
+read_request_timeout_in_ms: 50000
+# How long the coordinator should wait for seq or index scans to complete
+range_request_timeout_in_ms: 100000
+# How long the coordinator should wait for writes to complete
+write_request_timeout_in_ms: 20000
+# How long the coordinator should wait for counter writes to complete
+counter_write_request_timeout_in_ms: 50000
+# How long a coordinator should continue to retry a CAS operation
+# that contends with other proposals for the same row
+cas_contention_timeout_in_ms: 10000
+# How long the coordinator should wait for truncates to complete
+# (This can be much longer, because unless auto_snapshot is disabled
+# we need to flush first so we can snapshot before removing the data.)
+truncate_request_timeout_in_ms: 600000
+# The default timeout for other, miscellaneous operations
+request_timeout_in_ms: 100000
+
+# How long before a node logs slow queries. Select queries that take longer than
+# this timeout to execute, will generate an aggregated log message, so that slow queries
+# can be identified. Set this value to zero to disable slow query logging.
+slow_query_log_timeout_in_ms: 5000
+And then opened terminal and executed below command
+
+cqlsh --request-timeout=6000
+    
